@@ -1,12 +1,21 @@
 # tools/ytmusic.py
 
+import os
+import json
 from pathlib import Path
 from ytmusicapi import YTMusic
 
-PROJECT_ROOT = Path(__file__).parent.parent
-BROWSER_JSON = PROJECT_ROOT / "browser.json"
+# Check for Railway environment variable first
+YTMUSIC_AUTH = os.getenv("YTMUSIC_AUTH")
 
-yt = YTMusic(str(BROWSER_JSON))
+if YTMUSIC_AUTH:
+    # Railway: use env variable
+    yt = YTMusic(YTMUSIC_AUTH)
+else:
+    # Local: use file
+    PROJECT_ROOT = Path(__file__).parent.parent
+    BROWSER_JSON = PROJECT_ROOT / "browser.json"
+    yt = YTMusic(str(BROWSER_JSON))
 
 def get_history(limit=50):
     """Get recent listening history"""

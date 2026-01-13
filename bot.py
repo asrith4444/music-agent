@@ -56,16 +56,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"Progress update error: {e}")
     
     try:
-        # Run orchestrator with progress callback
         result = await orchestrator.run(user_request, progress_callback=update_progress)
-        
-        # Format and send final response
-        response = format_playlist_response(result)
-        await status_msg.edit_text(response, parse_mode='HTML')
-        
-    except Exception as e:
-        await status_msg.edit_text(f"Something went wrong: {str(e)}")
+    
+        # Check response type
+        if result.get('type') == 'chat':
+            await status_msg.edit_text(result.get('message', "Hey!"))
+        elif result.get('type') == 'settings':
+            await status_msg.edit_text(result.get('message', "Use /taste to set preferences."))
+        else:
+            # Playlist response
+            response = format_playlist_response(result)
+            await status_msg.edit_text(response, parse_mode='HTML')
 
+    except Exception as e:
+        await status_msg.edit_text(f"Something went wrong: {str(e)}") 
 async def set_taste(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_authorized(update.effective_user.id):
         return

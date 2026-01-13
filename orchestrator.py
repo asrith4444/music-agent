@@ -16,6 +16,29 @@ from db.database import (
     get_cached_songs
 )
 
+INTENT_PROMPT = """You are a music agent assistant.
+
+Determine if the user wants:
+1. A playlist/music recommendation
+2. Just chatting/greeting
+3. Help with settings or profile
+
+Examples:
+- "Hi" → chat
+- "How are you" → chat
+- "gym playlist" → playlist
+- "surprise me" → playlist
+- "something melancholic" → playlist
+- "what can you do" → chat
+- "set my taste" → settings
+
+Respond ONLY with valid JSON:
+{{
+    "intent": "chat" | "playlist" | "settings",
+    "response": "your friendly response if chat, null if playlist/settings"
+}}
+"""
+
 ORCHESTRATOR_PROMPT = """You are a music orchestrator for a music lover.
 
 Your job: Understand what the user wants and decide the best strategy.
@@ -66,7 +89,22 @@ class Orchestrator:
             if progress_callback:
                 await progress_callback(msg)
         
-        # Step 1: Plan
+        # Step 0: Check intent
+        intent_result = self._check_intent(user_request)
+        
+        if intent_result['intent'] == 'chat':
+            return {
+                "type": "chat",
+                "message": intent_result.get('response', "Hey! Ask me for a playlist anytime.")
+            }
+        
+        if intent_result['intent'] == 'settings':
+            return {
+                "type": "settings",
+                "message": "Use /taste to set preferences.\nExample: /taste favorite_artists Sid Sriram, DSP"
+            }
+        
+        # Intent is playlist - continue with full flow
         await update("🧠 Understanding your request...")
         
         profile = get_profile()
@@ -154,8 +192,24 @@ class Orchestrator:
             log_recommendation(song['song_id'], user_request)
         
         playlist['orchestrator_plan'] = plan
+        playlist['type'] = 'playlist'
         
         return playlist
+    
+    def _check_intent(self, request: str) -> dict:
+        """Determine if user wants playlist, chat, or settings."""
+        messages = [
+            SystemMessage(content=INTENT_PROMPT),
+            HumanMessage(content=request)
+        ]
+        
+        try:
+            response = self.llm.invoke(messages)
+            return json.loads(response.content)
+        except Exception as e:
+            print(f"Intent check error: {e}")
+            # Default to playlist if unsure
+            return {"intent": "playlist", "response": None}
     
     def _create_plan(self, request: str, profile: dict, recent: list, now: datetime) -> dict:
         profile_str = json.dumps(profile, indent=2) if profile else "Not set yet"
@@ -181,7 +235,7 @@ class Orchestrator:
                 "understood_request": request,
                 "inferred_mood": "neutral",
                 "strategy": "match mood",
-                "search_queries": [f"Telugu {request}"],
+                "search_queries": [request],
                 "search_artists": [],
                 "target_songs": 15,
                 "playlist_mood": request,
